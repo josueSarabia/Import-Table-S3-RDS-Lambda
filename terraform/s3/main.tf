@@ -1,3 +1,8 @@
+provider "aws" {
+	region = var.region
+    profile = var.profile
+}
+
 resource "aws_s3_bucket" "rds_data_bucket" {
     bucket = var.name // "rds_data_bucket"
 

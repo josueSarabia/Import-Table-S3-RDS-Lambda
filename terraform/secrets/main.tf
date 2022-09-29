@@ -1,6 +1,11 @@
 
+provider "aws" {
+	region = var.region
+  profile = var.profile
+}
+
 resource "aws_secretsmanager_secret" "rds_password" {
-  name = var.name # "rds_password"
+  name = var.name # "rdspassword"
   replica {
     region = var.region
   }

@@ -17,3 +17,7 @@ variable "region" {
 variable "account_number" {
     description = "account number that it is in the rds arn"
 }
+
+variable "profile" {
+  description = "aws user profile"
+}

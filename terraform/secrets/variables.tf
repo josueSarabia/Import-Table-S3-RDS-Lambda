@@ -9,3 +9,7 @@ variable "value" {
 variable "region" {
     description = "region of the secret"
 }
+
+variable "profile" {
+    description = "aws user profile"
+}

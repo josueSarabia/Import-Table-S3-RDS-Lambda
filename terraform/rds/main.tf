@@ -1,3 +1,8 @@
+provider "aws" {
+	region = var.region
+	profile = var.profile
+}
+
 resource "aws_security_group" "postgresql_sg" {
   name        = "postgresql"
   description = "Open Postgres for incoming traffic"
