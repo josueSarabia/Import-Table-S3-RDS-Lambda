@@ -1,3 +1,8 @@
+provider "aws" {
+	region = var.region
+  profile = var.profile
+}
+
 data "archive_file" "layer_zip" {
     type = "zip"
     source_dir = "${path.module}/python/"
@@ -45,10 +50,19 @@ resource "aws_lambda_function" "import_table_lambda" {
   source_code_hash = filebase64sha256("${path.module}/src/index.zip")
   runtime = "python3.8"
   layers = [ aws_lambda_layer_version.python_dep_layer.arn ]
+
+  environment {
+    variables = {
+      region = var.region
+      secret_name = var.secret_name
+      rds_host = var.rds_host
+      bucket_name = var.bucket_name
+    }
+  }
 }
 
 resource "aws_s3_bucket_notification" "aws-lambda-trigger" {
-  bucket = var.bucket_id
+  bucket = var.bucket_name
   lambda_function {
     lambda_function_arn = aws_lambda_function.import_table_lambda.arn
     events = ["s3:ObjectCreated:*"]
@@ -60,5 +74,5 @@ resource "aws_lambda_permission" "test" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.import_table_lambda.function_name
   principal     = "s3.amazonaws.com"
-  source_arn    = "arn:aws:s3:::${var.bucket_id}"
+  source_arn    = "arn:aws:s3:::${var.bucket_name}"
 }

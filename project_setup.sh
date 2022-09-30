@@ -1,112 +1,64 @@
 #!/bin/bash
 
+# read terraform action (init, apply, destroy)
+if [[ $# == 1 && ($1 == "init" || $1 == "apply" || $1 == "destroy") ]]
+then
+    action=$1
+else
+    echo "unknown argmuent with value $1. available options: init, apply, destroy."
+    exit 1
+fi
+
 echo "Starting script..."
-
-# region=us-east-1
-rds_identifier=personsdb
-secret_name=database_pw
-s3_bucket=sfs-misc-data
+region = "us-east-1"
+profile = "josue.sarabia"
+bucket_name = "rds-data-bucket"
 account_number=$(aws sts get-caller-identity --query "Account" --output text)
+secret_name = "rdspassword"
+db_identifier = "personsdb"
 
-# echo "Creating Security Group"
-# aws ec2 create-security-group --group-name postgresql --description "Open Postgres for incoming traffic"
 
-# sg_id=$(aws ec2 describe-security-groups --group-names "postgresql" --query "SecurityGroups[*].[GroupId]" --output text)
+if [[ $action == "init" ]]
+then
+    echo "init s3 bucket"
+    terraform -chdir=./terraform/s3/ init
 
-# echo $sg_id
+    echo "init secret"
+    terraform -chdir=../secrets/ init
 
-# echo "opening port 5432 for postgres connection"
-# aws ec2 authorize-security-group-ingress --group-id $sg_id --protocol tcp --port 5432 --cidr 0.0.0.0/0
+    echo "init rds"
+    terraform -chdir=../rds/ init
 
-echo "Generating secure password"
-password=$(pwgen 20 -sn1)
+    echo "init lambda"
+    terraform -chdir=../lambda/ init
+else
+    echo "Generating secure password"
+    password=$(pwgen 20 -sn1)
 
-#echo "uploading password to SecretsManager"
-#aws secretsmanager create-secret --name $secret_name --secret-string $password --region $region
+    echo "$action s3 bucket"
+    terraform -chdir=./terraform/s3/ $action -var "name=$bucket_name" -var "region=$region" -var "profile=$profile" -auto-approve
 
-# echo "Creating the RDS"
-# aws rds create-db-instance \
-    # --db-name postgres \
-    # --db-instance-identifier $rds_identifier \
-    # --engine postgres \
-    # --master-username postgres \
-    # --master-user-password $password \
-    # --publicly-accessible \
-    # --db-instance-class db.t3.micro \
-    # --storage-type gp2 \
-    # --enable-iam-database-authentication \
-    # --region $region \
-    # --allocated-storage 20 \
-    # --vpc-security-group-ids $sg_id > info
+    echo "$action secret"
+    terraform -chdir=../secrets/ $action -var "name=$secret_name" -var "value=$password" -var "region=$region" -var "profile=$profile" -auto-approve
 
-# echo "creating Policy and role"
-# aws iam create-policy \
-#    --policy-name rds-s3-import-policy \
-#    --policy-document '{
-#      "Version": "2012-10-17",
-#      "Statement": [
-#        {
-#          "Sid": "s3import",
-#          "Action": [
-#            "s3:GetObject",
-#            "s3:ListBucket"
-#          ],
-#          "Effect": "Allow",
-#          "Resource": [
-#            "arn:aws:s3:::'$s3_bucket'", 
-#            "arn:aws:s3:::'$s3_bucket'/*"
-#          ] 
-#        }
-#      ] 
-#    }' >> info
+    echo "$action rds"
+    terraform -chdir=../rds/ $action -var "identifier=$db_identifier" -var "password=$password" -var "s3_bucket=$bucket_name" \
+        -var "region=$region" -var "profile=$profile" -var "account_number=$account_number" -auto-approve
 
-# aws iam create-role \
-#    --role-name rds-s3-import-role \
-#    --assume-role-policy-document '{
-#      "Version": "2012-10-17",
-#      "Statement": [
-#        {
-#          "Effect": "Allow",
-#          "Principal": {
-#             "Service": "rds.amazonaws.com"
-#           },
-#          "Action": "sts:AssumeRole",
-#          "Condition": {
-#              "StringEquals": {
-#                 "aws:SourceArn": "arn:aws:rds:'$region':'$account_number':db:'$rds_identifier'"
-#                 }
-#              }
-#        }
-#      ] 
-#    }' >> info
+    echo "get rds endpoint"
+    endpoint=$(aws rds describe-db-instances --db-instance-identifier $db_identifier --query "DBInstances[*].Endpoint.Address" --output text)
 
-# echo "attach role and policy"
-# aws iam attach-role-policy \
-#    --policy-arn arn:aws:iam::$account_number:policy/rds-s3-import-policy \
-#    --role-name rds-s3-import-role
+    echo "installing python packages"
+    mkdir -p ./terraform/lambda/python/lib/python3.8/site-packages/
+    pip3 install boto3 psycopg2-binary aws_lambda_powertools -t ./terraform/lambda/python/lib/python3.8/site-packages/
 
-# state="creating"
-# until [[ "available" = "$state" ]]
-# do
-    # state=$(aws rds describe-db-instances --db-instance-identifier $rds_identifier --query "DBInstances[*].[DBInstanceStatus]" --output text)
-    # echo "waiting for db to become available..."
-    # echo "Status: $state"\n
-    # sleep 30;
-# done;
+    echo "$action lambda"
+    terraform -chdir=../lambda/ $action -var "bucket_name=$bucket_name" -var "secret_name=$secret_name" -var "rds_host=$endpoint" \
+        -var "region=$region" -var "profile=$profile" -auto-approve
 
-# echo "Add the IAM role to the RDS instance"
-# aws rds add-role-to-db-instance \
-#   --db-instance-identifier $rds_identifier \
-#    --feature-name s3Import \
-#   --role-arn arn:aws:iam::$account_number:role/rds-s3-import-role \
-#   --region $region
+    echo endpoint
 
-endpoint=$(aws rds describe-db-instances --db-instance-identifier personsdb --query "DBInstances[*].Endpoint.Address" --output text)
+    echo "Complete!"
 
-echo endpoint
-
-echo "Complete!"
-
-rm info
-
-printf "$endpoint\n$password\n$s3_bucket" | tee info
+    printf "$endpoint\n$password" | tee info
+fi

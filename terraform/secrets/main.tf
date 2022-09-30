@@ -5,7 +5,7 @@ provider "aws" {
 }
 
 resource "aws_secretsmanager_secret" "rds_password" {
-  name = var.name # "rdspassword"
+  name = var.name
   replica {
     region = var.region
   }
