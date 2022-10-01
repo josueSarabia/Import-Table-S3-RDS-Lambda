@@ -25,6 +25,7 @@ def lambda_handler(event, context):
     installed = cursor.fetchone()
 
     if installed and installed[0] == 0:
+        print("installing aws_s3")
         cursor.execute("CREATE EXTENSION aws_s3 CASCADE;")
 
     cursor.execute(f"DROP TABLE IF EXISTS persons; CREATE TABLE persons \

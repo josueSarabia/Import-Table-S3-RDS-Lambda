@@ -21,3 +21,7 @@ variable "account_number" {
 variable "profile" {
   description = "aws user profile"
 }
+
+variable "postgresql_sg_id" {
+    description = "rds security group id"
+}
